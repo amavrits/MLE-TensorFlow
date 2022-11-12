@@ -1,11 +1,35 @@
 import tensorflow_probability as tfp
 from tensorflow_probability import distributions as tfd
 import tensorflow as tf
-import time as tm
-import matplotlib.pyplot as plt
 import numpy as np
 
-class TF_MLE():
+class Bootstrapping:
+
+    def nonparameteric_bootstrapping(self, n_bootstrap=10_000, seed=None):
+
+        # if seed is not None:
+        #     np.random.seed(seed)
+        #
+        # idx_bootstrap = np.random.choice(np.arange(self.x.shape[0]), replace=True, size=n_bootstrap)
+        # bootstrap_samples = self.x[idx_bootstrap]
+        #
+        # self.theta_sample = np.zeros((n_bootstrap, self.n_theta))
+        # for i, bootstrap_sample in enumerate(bootstrap_samples):
+        #     self.fit(bootstrap_sample, n_theta=self.n_theta)
+        #     self.theta_sample[i] = self.theta.numpy()
+
+        pass
+
+    def parameteric_bootstrapping(self, predictive_fn, n_bootstrap=10_000, seed=None):
+        pass
+
+    def hypothesis_testing(self):
+        pass
+
+    def confidence_interval(self, confidence_lvl=0.95):
+        pass
+
+class MLE(Bootstrapping):
     def __init__(self, loglikehood):
         self.loglikehood = loglikehood
 
@@ -24,66 +48,33 @@ class TF_MLE():
         )
         return -observed_fisher[0]
 
-    def fit(self, x, n_theta=None):
+    def fit(self, x, n_theta=None, init=None, max_iterations=1_000, tol=1e-8, get_asymptotics=True):
+
         if n_theta is None:
             self.n_theta = x.shape[1]
         else:
             self.n_theta = n_theta
         self.x = x
-        init = tf.zeros(self.n_theta)
-        opt = tfp.optimizer.lbfgs_minimize(
-            lambda theta: self.loss_and_gradient(theta), init, max_iterations=1_000
-        )
-        self.opt = opt
-        self.get_estimator()
 
-    def get_estimator(self):
+        if init is None:
+            init = tf.ones(self.n_theta)
+
+        self.opt = tfp.optimizer.lbfgs_minimize(
+            lambda theta: self.loss_and_gradient(theta),
+            initial_position=init,
+            max_iterations=max_iterations,
+            stopping_condition=tfp.optimizer.converged_all,
+            tolerance=tol
+        )
+        self.get_estimator(get_asymptotics=get_asymptotics)
+
+    def get_estimator(self, get_asymptotics=True):
         self.theta = self.opt.position
-        observed_fisher = self.eval_observed_fisher(self.theta)
-        self.theta_cov = np.linalg.inv(observed_fisher)
-        self.theta_var = np.diag(self.theta_cov)
         self.max_loglike = self.loglikehood(self.theta, self.x)
+        if get_asymptotics:
+            observed_fisher = self.eval_observed_fisher(self.theta)
+            self.theta_cov = np.linalg.inv(observed_fisher)
+            self.theta_var = np.diag(self.theta_cov)
 
     def wald_test(self, theta_Ho):
         pass
-
-if __name__ == '__main__':
-
-    N = 100_000
-    P = 250
-
-    # 10_000--> bias and var increases / #2_000_000 --> they both decrease
-    # instead of MLE, work with empirical risk!!!
-
-    def bernoulli_logit_regression(theta, x, y):
-        theta = tf.expand_dims(theta, 1)
-        dist = tfd.Bernoulli(x @ theta)
-        return tf.reduce_sum(dist.log_prob(y))
-
-    tf.random.set_seed(123)
-    alpha_true = tfd.Normal(0.666, 1.0).sample()
-    beta_true = tfd.Normal(0.0, 3.14).sample([P, 1])
-    theta_true = np.append(alpha_true, beta_true)
-
-    x = tfd.Normal(0.0, 1.0).sample([N, P])
-    x = tf.concat([tf.reshape(tf.ones(x.shape[0]), [-1, 1]), x], axis=1)
-    y = tfd.Bernoulli(x @ theta_true.reshape(-1, 1)).sample()
-
-    loglike = lambda theta, y: bernoulli_logit_regression(theta, x, y)
-    mle = TF_MLE(loglike)
-
-    start = tm.time()
-    mle.fit(y, n_theta=x.shape[1])
-    end = tm.time()
-    print(f"tensorflow took: {end - start:.2f} seconds")
-
-    n_plot = 20
-    theta_opt = mle.theta
-    theta_true_plot = theta_true[:n_plot]
-    theta_opt_plot = theta_opt[:n_plot]
-
-    fig = plt.figure()
-    plt.scatter(np.arange(1, theta_true_plot.shape[0] + 1), theta_true_plot, color='b')
-    plt.scatter(np.arange(1, theta_opt_plot.shape[0] + 1), theta_opt_plot, color='r')
-    for i, s in enumerate(np.sqrt(mle.theta_var[:n_plot])):
-        plt.plot([i+1, i+1], [theta_opt_plot[i] - 1.96*s, theta_opt_plot[i] + 1.96*s], color='k')
