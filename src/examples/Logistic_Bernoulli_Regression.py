@@ -3,7 +3,7 @@ import tensorflow as tf
 import time as tm
 import matplotlib.pyplot as plt
 import numpy as np
-from MLE_TF import MLE
+from MLE_TensorFlow import MLE_TF
 
 N = 100_000
 P = 250
@@ -11,10 +11,16 @@ P = 250
 # 10_000--> bias and var increases / #2_000_000 --> they both decrease
 # instead of MLE, work with empirical risk!!!
 
-def bernoulli_logit_regression(theta, x, y):
-    theta = tf.expand_dims(theta, 1)
-    dist = tfd.Bernoulli(x @ theta)
-    return tf.reduce_sum(dist.log_prob(y))
+class bernoulli_logit_regression(MLE_TF):
+
+    def __init__(self, y):
+        self.y = y
+        self.n_theta = y.shape[1] + 1
+
+    def loglikehood(self, theta, x, y):
+        theta = tf.expand_dims(theta, 1)
+        dist = tfd.Bernoulli(x @ theta)
+        return tf.reduce_sum(dist.log_prob(y))
 
 tf.random.set_seed(123)
 alpha_true = tfd.Normal(0.666, 1.0).sample()
@@ -26,9 +32,8 @@ x = tf.concat([tf.reshape(tf.ones(x.shape[0]), [-1, 1]), x], axis=1)
 y = tfd.Bernoulli(x @ theta_true.reshape(-1, 1)).sample()
 y = tf.cast(y, tf.float32)
 
-loglike = lambda theta, y: bernoulli_logit_regression(theta, x, y)
-
-mle = MLE(loglike)
+mle = bernoulli_logit_regression(y)
+mle.loglikehood(theta=tf.cast(theta_true, tf.float32), x=x, y=y)
 
 start = tm.time()
 mle.fit(y, n_theta=x.shape[1])
